@@ -8,16 +8,19 @@
  * @param {number} height
  * @param {string} format
  * @param {number} quality
+ * @param {string} filter_name
  * @returns {Uint8Array}
  */
-export function encode_at_quality(input_bytes, width, height, format, quality) {
+export function encode_at_quality(input_bytes, width, height, format, quality, filter_name) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
         const ptr0 = passArray8ToWasm0(input_bytes, wasm.__wbindgen_export);
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passStringToWasm0(format, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len1 = WASM_VECTOR_LEN;
-        wasm.encode_at_quality(retptr, ptr0, len0, width, height, ptr1, len1, quality);
+        const ptr2 = passStringToWasm0(filter_name, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len2 = WASM_VECTOR_LEN;
+        wasm.encode_at_quality(retptr, ptr0, len0, width, height, ptr1, len1, quality, ptr2, len2);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
@@ -25,9 +28,9 @@ export function encode_at_quality(input_bytes, width, height, format, quality) {
         if (r3) {
             throw takeObject(r2);
         }
-        var v3 = getArrayU8FromWasm0(r0, r1).slice();
+        var v4 = getArrayU8FromWasm0(r0, r1).slice();
         wasm.__wbindgen_export3(r0, r1 * 1, 1);
-        return v3;
+        return v4;
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
     }
@@ -76,16 +79,19 @@ export function get_dimensions(input_bytes) {
  * @param {number} target_height
  * @param {string} format
  * @param {number} quality
+ * @param {string} filter_name
  * @returns {Uint8Array}
  */
-export function resize_image(input_bytes, target_width, target_height, format, quality) {
+export function resize_image(input_bytes, target_width, target_height, format, quality, filter_name) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
         const ptr0 = passArray8ToWasm0(input_bytes, wasm.__wbindgen_export);
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passStringToWasm0(format, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len1 = WASM_VECTOR_LEN;
-        wasm.resize_image(retptr, ptr0, len0, target_width, target_height, ptr1, len1, quality);
+        const ptr2 = passStringToWasm0(filter_name, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len2 = WASM_VECTOR_LEN;
+        wasm.resize_image(retptr, ptr0, len0, target_width, target_height, ptr1, len1, quality, ptr2, len2);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
@@ -93,9 +99,9 @@ export function resize_image(input_bytes, target_width, target_height, format, q
         if (r3) {
             throw takeObject(r2);
         }
-        var v3 = getArrayU8FromWasm0(r0, r1).slice();
+        var v4 = getArrayU8FromWasm0(r0, r1).slice();
         wasm.__wbindgen_export3(r0, r1 * 1, 1);
-        return v3;
+        return v4;
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
     }

@@ -11,45 +11,21 @@
  * Reports progress via callback during processing.
  */
 
-import { loadWasm, type WasmEngine } from "./wasmLoader";
 
-export interface ProcessResult {
-    blob: Blob;
-    width: number;
-    height: number;
-    originalSize: number;
-    processedSize: number;
-    action: "upscale" | "downscale";
-    format: string;
-    engine: "wasm" | "canvas";
-    processingTimeMs: number;
-}
+import type { OutputFormat, ProcessResult, ProgressCallback } from "./imageProcessorTypes.js";
 
-export type OutputFormat = "image/jpeg" | "image/png" | "image/webp";
+export type { OutputFormat, ProcessResult, ProgressCallback };
 
-export type ProgressCallback = (progress: number, message: string) => void;
+
 
 // Helper to yield to the main thread so the browser can paint progress updates
 const yieldToMain = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 // --- Helpers ---
 
-/** Convert WASM Uint8Array (may be backed by SharedArrayBuffer) to plain ArrayBuffer-backed copy */
-function toSafeBytes(data: Uint8Array): Uint8Array<ArrayBuffer> {
-    const copy = new ArrayBuffer(data.byteLength);
-    const view = new Uint8Array(copy);
-    view.set(data);
-    return view;
-}
 
-function mimeToShort(mime: string): string {
-    switch (mime) {
-        case "image/jpeg": return "jpeg";
-        case "image/png": return "png";
-        case "image/webp": return "webp";
-        default: return "jpeg";
-    }
-}
+
+
 
 export function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -73,104 +49,31 @@ async function fileToUint8Array(file: File): Promise<Uint8Array> {
     return new Uint8Array(buf);
 }
 
-async function wasmCompress(
-    wasm: WasmEngine,
-    inputBytes: Uint8Array,
-    origW: number,
-    origH: number,
-    targetBytes: number,
-    format: OutputFormat,
-    onProgress?: ProgressCallback
-): Promise<ProcessResult> {
-    const shortFmt = mimeToShort(format);
-    const totalSteps = 15;
-    const startTime = performance.now();
+let processorWorker: Worker | null = null;
 
-    // For PNG, quality is ignored — binary search on scale only
-    if (format === "image/png") {
-        const scales = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05];
-        for (let i = 0; i < scales.length; i++) {
-            onProgress?.(((i + 1) / scales.length) * 100, `Trying scale ${Math.round(scales[i] * 100)}%`);
-            await yieldToMain();
-            const w = Math.max(1, Math.round(origW * scales[i]));
-            const h = Math.max(1, Math.round(origH * scales[i]));
-            const result = wasm.resize_image(inputBytes, w, h, shortFmt, 100);
-            if (result.length <= targetBytes) {
-                return {
-                    blob: new Blob([toSafeBytes(result)], { type: format }),
-                    width: w, height: h,
-                    originalSize: inputBytes.length, processedSize: result.length,
-                    action: "downscale", format,
-                    engine: "wasm",
-                    processingTimeMs: performance.now() - startTime,
-                };
-            }
-        }
-        // Extreme fallback
-        const tiny = wasm.resize_image(inputBytes, 16, 16, "jpeg", 10);
-        return {
-            blob: new Blob([toSafeBytes(tiny)], { type: "image/jpeg" }),
-            width: 16, height: 16,
-            originalSize: inputBytes.length, processedSize: tiny.length,
-            action: "downscale", format: "image/jpeg",
-            engine: "wasm",
-            processingTimeMs: performance.now() - startTime,
-        };
+function getWorker(): Worker {
+    if (!processorWorker) {
+        processorWorker = new Worker(new URL('./wasmWorker.ts', import.meta.url), { type: 'module' });
     }
-
-    // JPEG/WebP: binary search on scale first, then quality
-    const scales = [1, 0.85, 0.7, 0.55, 0.4, 0.25, 0.1];
-    for (const scale of scales) {
-        const w = Math.max(1, Math.round(origW * scale));
-        const h = Math.max(1, Math.round(origH * scale));
-
-        // Binary search on quality at this scale
-        let lo = 1, hi = 100;
-        let best: Uint8Array | null = null;
-
-        for (let i = 0; i < totalSteps; i++) {
-            const mid = Math.round((lo + hi) / 2);
-            onProgress?.(
-                ((i + 1) / totalSteps) * 100,
-                `Scale ${Math.round(scale * 100)}% · Quality ${mid}%`
-            );
-            await yieldToMain();
-
-            const result = wasm.encode_at_quality(inputBytes, w, h, shortFmt, mid);
-            if (result.length <= targetBytes) {
-                best = result;
-                lo = mid + 1; // Try higher quality
-            } else {
-                hi = mid - 1;
-            }
-        }
-
-        if (best) {
-            return {
-                blob: new Blob([toSafeBytes(best)], { type: format }),
-                width: w, height: h,
-                originalSize: inputBytes.length, processedSize: best.length,
-                action: "downscale", format,
-                engine: "wasm",
-                processingTimeMs: performance.now() - startTime,
-            };
-        }
-    }
-
-    // Absolute fallback
-    const tiny = wasm.resize_image(inputBytes, 16, 16, "jpeg", 1);
-    return {
-        blob: new Blob([toSafeBytes(tiny)], { type: "image/jpeg" }),
-        width: 16, height: 16,
-        originalSize: inputBytes.length, processedSize: tiny.length,
-        action: "downscale", format: "image/jpeg",
-        engine: "wasm",
-        processingTimeMs: performance.now() - startTime,
-    };
+    return processorWorker;
 }
 
-async function wasmUpscale(
-    wasm: WasmEngine,
+let aiWorker: Worker | null = null;
+
+function getAIWorker(): Worker {
+    if (!aiWorker) {
+        // CRITICAL: Use a classic Worker loading from public/, NOT a Turbopack-bundled module.
+        // Turbopack creates blob: URLs for module workers, which breaks onnxruntime-web's
+        // internal WASM path resolution (it cannot find .wasm files from a blob: origin).
+        // By using a static JS file with importScripts(), the worker resolves paths
+        // relative to the page origin, which correctly serves the WASM files from public/.
+        aiWorker = new Worker('/ai-worker.js');
+    }
+    return aiWorker;
+}
+
+function processViaWorker(
+    action: "downscale" | "upscale",
     inputBytes: Uint8Array,
     origW: number,
     origH: number,
@@ -178,85 +81,98 @@ async function wasmUpscale(
     format: OutputFormat,
     onProgress?: ProgressCallback
 ): Promise<ProcessResult> {
-    const shortFmt = mimeToShort(format);
-    const maxDim = 16384;
-    const totalSteps = 15;
-    const startTime = performance.now();
+    return new Promise((resolve, reject) => {
+        const worker = getWorker();
+        const id = Math.random().toString(36).substring(7);
 
-    // Binary search on scale factor
-    let lo = 1.0;
-    let hi = Math.min(maxDim / Math.max(origW, origH), 10);
-    let bestResult: Uint8Array | null = null;
-    let bestW = origW, bestH = origH;
+        const handleMessage = (event: MessageEvent) => {
+            const data = event.data;
+            if (data.id !== id) return;
 
-    for (let i = 0; i < totalSteps; i++) {
-        const mid = (lo + hi) / 2;
-        const w = Math.min(maxDim, Math.max(1, Math.round(origW * mid)));
-        const h = Math.min(maxDim, Math.max(1, Math.round(origH * mid)));
-
-        onProgress?.(((i + 1) / totalSteps) * 100, `Scale ${Math.round(mid * 100)}%`);
-        await yieldToMain();
-
-        const result = wasm.resize_image(inputBytes, w, h, shortFmt, 100);
-        if (result.length >= targetBytes) {
-            bestResult = result;
-            bestW = w;
-            bestH = h;
-            hi = mid;
-        } else {
-            lo = mid;
-        }
-    }
-
-    if (bestResult) {
-        // Fine-tune with quality reduction for JPEG/WebP
-        if (bestResult.length > targetBytes * 1.2 && format !== "image/png") {
-            let qLo = 10, qHi = 100;
-            let refined = bestResult;
-            for (let i = 0; i < 10; i++) {
-                const qMid = Math.round((qLo + qHi) / 2);
-                onProgress?.(90 + i, `Refining upscale quality ${qMid}%`);
-                await yieldToMain();
-                const result = wasm.encode_at_quality(inputBytes, bestW, bestH, shortFmt, qMid);
-                if (result.length >= targetBytes) {
-                    refined = result;
-                    qHi = qMid;
-                } else {
-                    qLo = qMid;
-                }
+            if (data.type === "progress") {
+                onProgress?.(data.progress, data.message);
+            } else if (data.type === "success") {
+                worker.removeEventListener("message", handleMessage);
+                resolve({
+                    blob: new Blob([data.outputBytes], { type: format }),
+                    width: data.width,
+                    height: data.height,
+                    originalSize: inputBytes.length,
+                    processedSize: data.outputBytes.length,
+                    action,
+                    format,
+                    engine: "wasm",
+                    processingTimeMs: data.processingTimeMs
+                });
+            } else if (data.type === "error") {
+                worker.removeEventListener("message", handleMessage);
+                reject(new Error(data.error));
             }
-            return {
-                blob: new Blob([toSafeBytes(refined)], { type: format }),
-                width: bestW, height: bestH,
-                originalSize: inputBytes.length, processedSize: refined.length,
-                action: "upscale", format,
-                engine: "wasm",
-                processingTimeMs: performance.now() - startTime,
-            };
-        }
-
-        return {
-            blob: new Blob([toSafeBytes(bestResult)], { type: format }),
-            width: bestW, height: bestH,
-            originalSize: inputBytes.length, processedSize: bestResult.length,
-            action: "upscale", format,
-            engine: "wasm",
-            processingTimeMs: performance.now() - startTime,
         };
-    }
 
-    // Fallback: max dimensions
-    const fw = Math.min(maxDim, Math.round(origW * hi));
-    const fh = Math.min(maxDim, Math.round(origH * hi));
-    const fb = wasm.resize_image(inputBytes, fw, fh, shortFmt, 100);
-    return {
-        blob: new Blob([toSafeBytes(fb)], { type: format }),
-        width: fw, height: fh,
-        originalSize: inputBytes.length, processedSize: fb.length,
-        action: "upscale", format,
-        engine: "wasm",
-        processingTimeMs: performance.now() - startTime,
-    };
+        worker.addEventListener("message", handleMessage);
+        // Note: we just pass the inputBytes via typical clone strategy since the UI might still need memory, 
+        // string transfers for images up to 20MB takes <1ms in modern browsers anyway.
+        worker.postMessage({ id, action, inputBytes, origW, origH, targetBytes, format });
+    });
+}
+
+// ======================= AI WEBGPU ENGINE =======================
+
+export function processViaAIWorker(
+    imageData: ImageData,
+    onProgress?: ProgressCallback
+): Promise<ProcessResult> {
+    return new Promise((resolve, reject) => {
+        const worker = getAIWorker();
+        const id = Math.random().toString(36).substring(7);
+
+        const handleMessage = (event: MessageEvent) => {
+            const data = event.data;
+            if (data.id !== id) return;
+
+            if (data.type === "progress") {
+                onProgress?.(data.progress, data.message);
+            } else if (data.type === "success") {
+                worker.removeEventListener("message", handleMessage);
+
+                // Convert back the upscaled raw pixel ImageData to a Blob
+                const canvas = document.createElement("canvas");
+                canvas.width = data.width;
+                canvas.height = data.height;
+                const ctx = canvas.getContext("2d");
+                if (ctx) ctx.putImageData(data.outputImageData, 0, 0);
+
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        resolve({
+                            blob,
+                            width: data.width,
+                            height: data.height,
+                            originalSize: 0,
+                            processedSize: blob.size,
+                            action: "upscale",
+                            format: "image/jpeg", // AI naturally outputs RGB, we bake it into JPG
+                            engine: "ai",
+                            processingTimeMs: data.processingTimeMs
+                        });
+                    } else {
+                        reject(new Error("AI Worker final blob creation failed"));
+                    }
+                }, "image/jpeg", 1.0);
+
+            } else if (data.type === "error") {
+                worker.removeEventListener("message", handleMessage);
+                reject(new Error(data.error));
+            }
+        };
+
+        worker.addEventListener("message", handleMessage);
+
+        // Transfer the image array buffer physically to the worker to save memory
+        const buffer = imageData.data.buffer;
+        worker.postMessage({ id, action: "upscale", imageData }, [buffer]);
+    });
 }
 
 // ======================= CANVAS FALLBACK =======================
@@ -413,42 +329,79 @@ export async function processImage(
     file: File,
     targetBytes: number,
     outputFormat: OutputFormat,
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    upscaleEngine: "fast" | "ai" = "fast"
 ): Promise<ProcessResult> {
-    // Try WASM first
-    const wasm = await loadWasm();
+    onProgress?.(5, "Reading image dimensions...");
+    const url = URL.createObjectURL(file);
+    let img: HTMLImageElement;
 
-    if (wasm) {
-        onProgress?.(5, "Loading image into WASM engine...");
-        const inputBytes = await fileToUint8Array(file);
-        const dims = wasm.get_dimensions(inputBytes);
-        const origW = dims[0];
-        const origH = dims[1];
-
-        let result: ProcessResult;
-        if (file.size > targetBytes) {
-            result = await wasmCompress(wasm, inputBytes, origW, origH, targetBytes, outputFormat, onProgress);
-        } else {
-            result = await wasmUpscale(wasm, inputBytes, origW, origH, targetBytes, outputFormat, onProgress);
-        }
-        result.originalSize = file.size;
-        return result;
+    try {
+        img = await loadImage(url);
+    } catch {
+        URL.revokeObjectURL(url);
+        throw new Error("Failed to load image for processing");
     }
 
-    // Canvas fallback
-    onProgress?.(5, "Using Canvas engine...");
-    const url = URL.createObjectURL(file);
+    const origW = img.naturalWidth;
+    const origH = img.naturalHeight;
+    const inputBytes = await fileToUint8Array(file);
+
+    const action: "downscale" | "upscale" = file.size > targetBytes ? "downscale" : "upscale";
+    if (action === "upscale" && upscaleEngine === "ai") {
+        try {
+            onProgress?.(5, "Preparing image for AI Deep Learning network...");
+            const canvas = document.createElement("canvas");
+            canvas.width = origW;
+            canvas.height = origH;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) throw new Error("Could not get 2D context for AI prep");
+
+            ctx.drawImage(img, 0, 0, origW, origH);
+            const imageData = ctx.getImageData(0, 0, origW, origH);
+
+            const result = await processViaAIWorker(imageData, onProgress);
+            result.originalSize = file.size;
+            result.format = outputFormat;
+            URL.revokeObjectURL(url);
+            return result;
+        } catch (aiError) {
+            console.error("[ImageForge] AI Engine completely failed:", aiError);
+            if (aiWorker) {
+                aiWorker.terminate();
+                aiWorker = null;
+            }
+            URL.revokeObjectURL(url);
+            throw new Error(`AI Engine failed: ${aiError instanceof Error ? aiError.message : String(aiError)}. Your device may not have enough VRAM or WebGPU support.`);
+        }
+    }
+
     try {
-        const img = await loadImage(url);
+        // Try to process via the WASM Web Worker
+        onProgress?.(10, "Initializing high-speed WASM engine...");
+        const result = await processViaWorker(action, inputBytes, origW, origH, targetBytes, outputFormat, onProgress);
+        result.originalSize = file.size;
+        URL.revokeObjectURL(url);
+        return result;
+    } catch (workerError) {
+        console.warn("[ImageForge] Worker failed, killing worker and falling back to Canvas:", workerError);
+        if (processorWorker) {
+            processorWorker.terminate();
+            processorWorker = null;
+        }
+
+        // Fallback gracefully to the slower Canvas engine 
+        onProgress?.(10, "Using Canvas engine fallback...");
+
         let result: ProcessResult;
-        if (file.size > targetBytes) {
+        if (action === "downscale") {
             result = await canvasCompress(img, targetBytes, outputFormat, onProgress);
         } else {
             result = await canvasUpscale(img, targetBytes, outputFormat, onProgress);
         }
+
         result.originalSize = file.size;
-        return result;
-    } finally {
         URL.revokeObjectURL(url);
+        return result;
     }
 }

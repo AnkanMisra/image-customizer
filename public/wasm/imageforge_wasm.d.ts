@@ -5,7 +5,7 @@
  * Encode an image at a specific quality without resizing.
  * Useful for the binary search on quality to hit a target file size.
  */
-export function encode_at_quality(input_bytes: Uint8Array, width: number, height: number, format: string, quality: number): Uint8Array;
+export function encode_at_quality(input_bytes: Uint8Array, width: number, height: number, format: string, quality: number, filter_name: string): Uint8Array;
 
 /**
  * Get the dimensions (width, height) of an image from its bytes.
@@ -25,15 +25,15 @@ export function get_dimensions(input_bytes: Uint8Array): Uint32Array;
  *
  * Returns encoded bytes of the resized image.
  */
-export function resize_image(input_bytes: Uint8Array, target_width: number, target_height: number, format: string, quality: number): Uint8Array;
+export function resize_image(input_bytes: Uint8Array, target_width: number, target_height: number, format: string, quality: number, filter_name: string): Uint8Array;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly resize_image: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
     readonly get_dimensions: (a: number, b: number, c: number) => void;
-    readonly encode_at_quality: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
-    readonly resize_image: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
+    readonly encode_at_quality: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
     readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
