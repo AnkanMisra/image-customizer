@@ -1,0 +1,15 @@
+{
+  "name": "imageforge-wasm",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "imageforge_wasm_bg.wasm",
+    "imageforge_wasm.js",
+    "imageforge_wasm.d.ts"
+  ],
+  "main": "imageforge_wasm.js",
+  "types": "imageforge_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
