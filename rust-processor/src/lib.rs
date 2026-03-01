@@ -22,13 +22,23 @@ pub fn resize_image(
     target_height: u32,
     format: &str,
     quality: u8,
+    filter_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let img = load_image(input_bytes)?;
 
-    // Use Lanczos3 — the gold standard for downscaling quality
-    let resized = img.resize_exact(target_width, target_height, FilterType::Lanczos3);
+    let filter = parse_filter(filter_name);
+    let resized = img.resize_exact(target_width, target_height, filter);
 
-    encode_image(&resized, format, quality)
+    // If upscaling (making the image physically larger in pixels), apply an Unsharp Mask 
+    // to algorithmically enhance edge contrast and perceivable clarity.
+    let enhanced = if target_width > img.width() || target_height > img.height() {
+        // Parameters: sigma (blur radius), threshold (pixel diff cutoff)
+        resized.unsharpen(2.5, 30) // Aggressive sharpening
+    } else {
+        resized
+    };
+
+    encode_image(&enhanced, format, quality)
 }
 
 /// Get the dimensions (width, height) of an image from its bytes.
@@ -48,13 +58,25 @@ pub fn encode_at_quality(
     height: u32,
     format: &str,
     quality: u8,
+    filter_name: &str,
 ) -> Result<Vec<u8>, JsValue> {
     let img = load_image(input_bytes)?;
-    let resized = img.resize_exact(width, height, FilterType::Lanczos3);
+    let filter = parse_filter(filter_name);
+    let resized = img.resize_exact(width, height, filter);
     encode_image(&resized, format, quality)
 }
 
 // --- Internal helpers ---
+
+fn parse_filter(name: &str) -> FilterType {
+    match name {
+        "catmullrom" => FilterType::CatmullRom,
+        "triangle" => FilterType::Triangle,
+        "nearest" => FilterType::Nearest,
+        "gaussian" => FilterType::Gaussian,
+        "lanczos3" | _ => FilterType::Lanczos3,
+    }
+}
 
 fn load_image(bytes: &[u8]) -> Result<DynamicImage, JsValue> {
     let reader = ImageReader::new(Cursor::new(bytes))

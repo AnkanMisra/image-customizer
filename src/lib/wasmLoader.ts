@@ -11,14 +11,16 @@ export type WasmEngine = {
         width: number,
         height: number,
         format: string,
-        quality: number
+        quality: number,
+        filter_name: string
     ) => Uint8Array;
     encode_at_quality: (
         input: Uint8Array,
         width: number,
         height: number,
         format: string,
-        quality: number
+        quality: number,
+        filter_name: string
     ) => Uint8Array;
     get_dimensions: (input: Uint8Array) => Uint32Array;
 };
@@ -40,14 +42,18 @@ export async function loadWasm(): Promise<WasmEngine | null> {
 
 async function initWasm(): Promise<WasmEngine | null> {
     try {
+        const origin = typeof window !== "undefined" ? window.location.origin : self.location.origin;
+        const jsUrl = new URL("/wasm/imageforge_wasm.js", origin).href;
+        const wasmUrl = new URL("/wasm/imageforge_wasm_bg.wasm", origin).href;
+
         // Fetch the JS glue and WASM binary in parallel
         const [jsResponse, wasmResponse] = await Promise.all([
-            fetch("/wasm/imageforge_wasm.js"),
-            fetch("/wasm/imageforge_wasm_bg.wasm"),
+            fetch(jsUrl),
+            fetch(wasmUrl),
         ]);
 
         if (!jsResponse.ok || !wasmResponse.ok) {
-            throw new Error("Failed to fetch WASM files");
+            throw new Error(`Failed to fetch WASM files. JS: ${jsResponse.status}, WASM: ${wasmResponse.status}`);
         }
 
         // Create a blob URL for the JS glue module so we can import it

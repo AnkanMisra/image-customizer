@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { DesignNav } from "@/components/DesignNav";
 
 export const metadata: Metadata = {
   title: "ImageForge",
@@ -36,6 +37,7 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased">
         {children}
+        <DesignNav />
         <Toaster richColors position="bottom-center" />
       </body>
     </html>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -40,6 +40,11 @@ export function Editor({ file, onReset, onResult }: EditorProps) {
     const [progress, setProgress] = useState(0);
     const [progressMsg, setProgressMsg] = useState("");
     const [wasmReady, setWasmReady] = useState(false);
+    const [upscaleEngine, setUpscaleEngine] = useState<"fast" | "ai">("fast");
+
+    // Comparison Modal State
+    const [showComparison, setShowComparison] = useState(false);
+    const [processedResult, setProcessedResult] = useState<{ url: string; result: ProcessResult } | null>(null);
 
     useEffect(() => {
         loadWasm().then((w) => setWasmReady(!!w));
@@ -67,7 +72,14 @@ export function Editor({ file, onReset, onResult }: EditorProps) {
             setUnit("KB");
         }
 
+        if (processedResult) {
+            URL.revokeObjectURL(processedResult.url);
+            setProcessedResult(null);
+            setShowComparison(false);
+        }
+
         return () => URL.revokeObjectURL(url);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [file]);
 
     const targetBytes =
@@ -92,36 +104,17 @@ export function Editor({ file, onReset, onResult }: EditorProps) {
             const result = await processImage(file, targetBytes, format, (p, msg) => {
                 setProgress(p);
                 setProgressMsg(msg);
-            });
+            }, upscaleEngine);
 
             const url = URL.createObjectURL(result.blob);
-            const a = document.createElement("a");
-            const baseName = file.name.replace(/\.[^.]+$/, "");
-            a.href = url;
-            a.download = `${baseName}_resized.${getFormatExtension(result.format)}`;
-            a.click();
-            URL.revokeObjectURL(url);
 
-            saveRecord({
-                originalName: file.name,
-                originalSize: file.size,
-                processedSize: result.processedSize,
-                targetSize: targetBytes,
-                format: result.format,
-                action: result.action,
-            });
+            // Show the comparison modal instead of downloading immediately
+            setProcessedResult({ url, result });
+            setShowComparison(true);
 
-            onResult(result);
-
-            const timeStr =
-                result.processingTimeMs < 1000
-                    ? `${Math.round(result.processingTimeMs)}ms`
-                    : `${(result.processingTimeMs / 1000).toFixed(1)}s`;
-
-            toast.success(`Done in ${timeStr}`);
         } catch (err) {
             console.error(err);
-            toast.error("Processing failed");
+            toast.error(err instanceof Error ? err.message : "Processing failed");
         } finally {
             setIsProcessing(false);
             setProgress(0);
@@ -129,15 +122,55 @@ export function Editor({ file, onReset, onResult }: EditorProps) {
         }
     };
 
+    const handleConfirmDownload = () => {
+        if (!processedResult) return;
+
+        const { url, result } = processedResult;
+        const a = document.createElement("a");
+        const baseName = file.name.replace(/\.[^.]+$/, "");
+        a.href = url;
+        a.download = `${baseName}_resized.${getFormatExtension(result.format)}`;
+        a.click();
+
+        saveRecord({
+            originalName: file.name,
+            originalSize: file.size,
+            processedSize: result.processedSize,
+            targetSize: targetBytes,
+            format: result.format,
+            action: result.action,
+        });
+
+        onResult(result);
+
+        const timeStr =
+            result.processingTimeMs < 1000
+                ? `${Math.round(result.processingTimeMs)}ms`
+                : `${(result.processingTimeMs / 1000).toFixed(1)}s`;
+
+        toast.success(`Downloaded successfully in ${timeStr}`);
+        setShowComparison(false);
+    };
+
+    const handleCancelDownload = () => {
+        // Clean up the processed blob URL and reset state so the original preview reappears
+        if (processedResult) {
+            URL.revokeObjectURL(processedResult.url);
+            setProcessedResult(null);
+        }
+        setShowComparison(false);
+    };
+
     return (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-px rounded-[3px] border border-white/15 overflow-hidden animate-in fade-in duration-400">
             {/* Preview — 3 cols */}
-            <div className="relative lg:col-span-3 bg-[#060606]">
+            <div className="relative lg:col-span-3 bg-[#060606] select-none">
                 <div className="relative aspect-[4/3] flex items-center justify-center overflow-hidden">
-                    {previewUrl && (
+                    {previewUrl && !processedResult && (
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                             src={previewUrl}
-                            alt="Preview"
+                            alt="Preview Original"
                             className="max-w-full max-h-full object-contain"
                         />
                     )}
@@ -237,6 +270,31 @@ export function Editor({ file, onReset, onResult }: EditorProps) {
                         </Select>
                     </div>
 
+                    {/* Upscale Engine Selection */}
+                    {isUpscale && (
+                        <div className="space-y-2 animate-in fade-in zoom-in duration-300">
+                            <Label className="font-mono text-[10px] uppercase tracking-[0.2em] text-emerald-400/90 font-bold flex items-center gap-2">
+                                ✨ Upscale Engine
+                            </Label>
+                            <div className="flex bg-white/[0.03] p-1 rounded-[3px] border border-white/10">
+                                <button
+                                    type="button"
+                                    onClick={() => setUpscaleEngine("fast")}
+                                    className={`flex-1 py-1.5 text-[10px] font-mono uppercase tracking-[0.1em] rounded-[2px] transition-colors ${upscaleEngine === 'fast' ? 'bg-white/10 text-white font-bold' : 'text-white/40 hover:text-white/70'}`}
+                                >
+                                    ⚡️ Lightning
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setUpscaleEngine("ai")}
+                                    className={`flex-1 py-1.5 text-[10px] font-mono uppercase tracking-[0.1em] rounded-[2px] transition-colors ${upscaleEngine === 'ai' ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30' : 'text-white/40 hover:text-white/70'}`}
+                                >
+                                    ✨ AI Enhance
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Direction hint */}
                     {targetValue && targetBytes > 0 && (
                         <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-white/35">
@@ -278,6 +336,154 @@ export function Editor({ file, onReset, onResult }: EditorProps) {
                         </span>
                     )}
                 </Button>
+            </div>
+
+            {/* COMPARISON MODAL */}
+            {showComparison && processedResult && (
+                <ComparisonModal
+                    originalUrl={previewUrl}
+                    enhancedUrl={processedResult.url}
+                    originalSize={file.size}
+                    enhancedSize={processedResult.result.processedSize}
+                    onConfirm={handleConfirmDownload}
+                    onCancel={handleCancelDownload}
+                />
+            )}
+        </div>
+    );
+}
+
+// =================== COMPARISON SLIDER COMPONENT ===================
+
+interface ComparisonModalProps {
+    originalUrl: string;
+    enhancedUrl: string;
+    originalSize: number;
+    enhancedSize: number;
+    onConfirm: () => void;
+    onCancel: () => void;
+}
+
+function ComparisonModal({ originalUrl, enhancedUrl, originalSize, enhancedSize, onConfirm, onCancel }: ComparisonModalProps) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [position, setPosition] = useState(50); // percentage
+    const isDragging = useRef(false);
+
+    const updatePosition = useCallback((clientX: number) => {
+        const container = containerRef.current;
+        if (!container) return;
+        const rect = container.getBoundingClientRect();
+        const x = clientX - rect.left;
+        const pct = Math.max(0, Math.min(100, (x / rect.width) * 100));
+        setPosition(pct);
+    }, []);
+
+    const handlePointerDown = useCallback((e: React.PointerEvent) => {
+        isDragging.current = true;
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        updatePosition(e.clientX);
+    }, [updatePosition]);
+
+    const handlePointerMove = useCallback((e: React.PointerEvent) => {
+        if (!isDragging.current) return;
+        updatePosition(e.clientX);
+    }, [updatePosition]);
+
+    const handlePointerUp = useCallback(() => {
+        isDragging.current = false;
+    }, []);
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-200 p-4 lg:p-8">
+            <div className="bg-[#080808] border border-white/10 rounded-[3px] shadow-2xl w-full max-w-6xl h-full max-h-[90vh] flex flex-col overflow-hidden">
+                {/* Header */}
+                <div className="flex justify-between items-center px-5 py-3 border-b border-white/10 bg-[#050505] shrink-0">
+                    <h2 className="font-mono text-xs uppercase tracking-widest text-white/80 flex items-center gap-2">
+                        <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                        Compare Before Download
+                    </h2>
+                    <button onClick={onCancel} className="text-white/50 hover:text-white/90 transition-colors">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+
+                {/* Slider Area */}
+                <div
+                    ref={containerRef}
+                    className="relative flex-1 overflow-hidden bg-black select-none"
+                    style={{ cursor: "ew-resize", touchAction: "none" }}
+                    onPointerDown={handlePointerDown}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onPointerLeave={handlePointerUp}
+                >
+                    {/* ORIGINAL image — full width, always visible as the base layer */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                        src={originalUrl}
+                        alt="Original"
+                        className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                        draggable={false}
+                    />
+
+                    {/* ENHANCED image — same position & size, clipped by clip-path */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                        src={enhancedUrl}
+                        alt="Enhanced"
+                        className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                        draggable={false}
+                        style={{
+                            clipPath: `inset(0 ${100 - position}% 0 0)`,
+                        }}
+                    />
+
+                    {/* Divider line + handle */}
+                    <div
+                        className="absolute top-0 bottom-0 pointer-events-none z-10"
+                        style={{ left: `${position}%`, transform: "translateX(-50%)" }}
+                    >
+                        {/* Vertical line */}
+                        <div className="w-[2px] h-full bg-white/80 mx-auto" />
+
+                        {/* Drag handle */}
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 border-2 border-white/80 backdrop-blur-md flex items-center justify-center shadow-2xl">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M5 3L2 8L5 13" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                <path d="M11 3L14 8L11 13" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </div>
+                    </div>
+
+                    {/* Labels */}
+                    <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-[3px] font-mono text-[10px] text-white/80 uppercase tracking-widest pointer-events-none border border-white/10 z-20">
+                        Original · {formatFileSize(originalSize)}
+                    </div>
+                    <div className="absolute top-4 right-4 bg-emerald-600/30 backdrop-blur-md px-3 py-1.5 rounded-[3px] font-mono text-[10px] text-emerald-300 uppercase tracking-widest pointer-events-none border border-emerald-500/30 z-20">
+                        Enhanced · {formatFileSize(enhancedSize)}
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-5 py-3 bg-[#050505] border-t border-white/10 flex items-center justify-between shrink-0">
+                    <p className="font-mono text-[10px] text-white/30 uppercase tracking-widest">Drag to compare</p>
+                    <div className="flex items-center gap-3">
+                        <Button
+                            variant="ghost"
+                            onClick={onCancel}
+                            className="font-mono text-[11px] uppercase tracking-widest text-white/60 hover:text-white"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={onConfirm}
+                            className="font-mono text-[11px] uppercase tracking-widest bg-emerald-500 text-black hover:bg-emerald-400 h-10 px-6 rounded-[2px]"
+                        >
+                            <Download className="w-3.5 h-3.5 mr-2" />
+                            Accept & Download
+                        </Button>
+                    </div>
+                </div>
             </div>
         </div>
     );
