@@ -1,0 +1,1 @@
+/Users/ankan-macbook/Desktop/Code/image-upscaler-descaler/rust-processor/target/wasm32-unknown-unknown/release/libimageforge_wasm.rlib: /Users/ankan-macbook/Desktop/Code/image-upscaler-descaler/rust-processor/src/lib.rs

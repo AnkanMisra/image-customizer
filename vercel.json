@@ -1,0 +1,6 @@
+{
+    "$schema": "https://openapi.vercel.sh/vercel.json",
+    "buildCommand": "cd rust-processor && wasm-pack build --target web --out-dir ../public/wasm && cd .. && bun run build",
+    "framework": "nextjs",
+    "installCommand": "bun install"
+}
