@@ -121,7 +121,7 @@ export default function Design2() {
                 </div>
 
                 {/* RIGHT PANEL - DropZone */}
-                <div className="lg:col-span-7 p-4 sm:p-6 lg:p-8 flex items-stretch relative z-10 bg-[#FAFAFA]">
+                <div className="lg:col-span-7 p-4 sm:p-6 lg:p-8 flex flex-col min-h-[400px] lg:min-h-0 items-stretch relative z-10 bg-[#FAFAFA]">
                     <div className="flex-1 w-full relative group overflow-hidden animate-fade-up" style={{ animationDelay: "0.15s" }}>
                         <div className="absolute inset-4 lg:inset-6 flex flex-col">
                             <DropZone
