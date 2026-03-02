@@ -1,15 +1,20 @@
 "use client";
 
 import React, { useState } from "react";
+import { Zap, Brain, Cpu, Sparkles, ArrowRight } from "lucide-react";
 import { DropZone } from "@/components/DropZone";
 import { Editor } from "@/components/Editor";
 import { ResultBar } from "@/components/ResultBar";
 import type { ProcessResult } from "@/lib/imageProcessor";
 
 /**
- * DESIGN 1 — "Side-by-Side"
- * Hero text + taglines on LEFT, Drop zone on RIGHT
- * Feature cards below spanning full width
+ * DESIGN 1 — "OBSIDIAN"
+ * Luxury dark editorial × Apple product page
+ * Playfair Display serif + DM Sans body
+ * Warm ivory + gold accents on deep black
+ *
+ * UX: Full viewport, DropZone fills right column,
+ * zero dead space, everything above the fold
  */
 export default function Design1() {
     const [file, setFile] = useState<File | null>(null);
@@ -21,104 +26,130 @@ export default function Design1() {
     };
 
     return (
-        <div className="min-h-screen bg-[#050505] relative flex flex-col">
-            {/* NAV */}
-            <nav className="flex items-center justify-between px-8 sm:px-12 py-5">
-                <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-white/50">
-                    /imageforge
-                </span>
-                <div className="flex items-center gap-6">
-                    <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-white/40">
-                        Design 1
-                    </span>
-                </div>
-            </nav>
+        <div className="min-h-screen lg:h-screen bg-[#0A0A0A] relative flex flex-col overflow-hidden lg:overflow-visible">
+            {/* Radial glow — left side */}
+            <div
+                className="pointer-events-none absolute -top-10 -left-20 w-[600px] h-[450px] opacity-[0.06]"
+                style={{
+                    background: "radial-gradient(ellipse at center, #C9A96E 0%, transparent 70%)",
+                }}
+            />
 
             {!file ? (
-                <section className="px-8 sm:px-12 pt-6 pb-10">
-                    {/* HERO — two columns */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-                        {/* LEFT — branding */}
-                        <div className="space-y-6">
-                            <h1 className="font-display text-[clamp(3rem,8vw,5.5rem)] font-bold leading-[0.88] tracking-[-0.04em] text-white/[0.12] select-none">
-                                Image
-                                <br />
-                                Forge
-                            </h1>
+                <>
+                    {/* FULL VIEWPORT GRID — nav + content + footer all packed tight */}
+                    <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-0">
+                        {/* LEFT COLUMN — content */}
+                        <div className="lg:col-span-5 flex flex-col px-6 sm:px-10 lg:px-14 py-5 lg:h-full">
+                            {/* NAV */}
+                            <nav className="flex items-center justify-between mb-auto">
+                                <span className="font-dm text-[13px] font-medium tracking-[0.3em] uppercase text-[#E8DCC8]/60">
+                                    ImageForge
+                                </span>
+                                <div className="flex items-center gap-4 sm:gap-6">
+                                    {["Privacy-first", "No upload", "Free"].map((item, i) => (
+                                        <React.Fragment key={item}>
+                                            {i > 0 && <div className="w-[1px] h-3 bg-[#E8DCC8]/10" />}
+                                            <span className={`font-dm text-[9px] sm:text-[10px] tracking-[0.15em] uppercase text-[#E8DCC8]/25 ${i === 1 ? "hidden sm:inline" : ""}`}>
+                                                {item}
+                                            </span>
+                                        </React.Fragment>
+                                    ))}
+                                </div>
+                            </nav>
 
-                            <div className="flex flex-wrap gap-2.5">
-                                <div className="bg-white/[0.04] border border-white/[0.08] px-4 py-2.5 rounded-[3px]">
-                                    <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-white/70 font-medium">
-                                        Resize to exact file size.
+                            {/* HERO — vertically centered */}
+                            <div className="flex-1 flex flex-col justify-center space-y-6">
+                                <div className="animate-fade-up">
+                                    <h1 className="font-playfair text-[clamp(2.8rem,6.5vw,5.5rem)] font-medium leading-[0.9] tracking-[-0.02em] text-[#E8DCC8]/90">
+                                        Craft your
+                                        <br />
+                                        <span className="italic text-[#C9A96E]/80">perfect</span>
+                                        <br />
+                                        image.
+                                    </h1>
+                                </div>
+
+                                <div className="animate-fade-up" style={{ animationDelay: "0.1s" }}>
+                                    <p className="font-dm text-[14px] text-[#E8DCC8]/35 leading-[1.7] max-w-md">
+                                        Resize any image to an exact file size.
+                                        <br />
+                                        Upscale with AI or compress with Rust/WASM
+                                        <br />
+                                        Entirely in your browser.
                                     </p>
                                 </div>
-                                <div className="bg-white/[0.04] border border-white/[0.08] px-4 py-2.5 rounded-[3px]">
-                                    <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-white/50 font-medium">
-                                        Rust/WASM · No upload.
-                                    </p>
+
+                                {/* Feature pills */}
+                                <div className="animate-fade-up flex flex-wrap items-center gap-2.5" style={{ animationDelay: "0.2s" }}>
+                                    {[
+                                        { label: "Lanczos3", Icon: Zap },
+                                        { label: "AI 4× Upscale", Icon: Brain },
+                                        { label: "WebGPU", Icon: Cpu },
+                                        { label: "Free Forever", Icon: Sparkles },
+                                    ].map((tag) => (
+                                        <span
+                                            key={tag.label}
+                                            className="inline-flex items-center gap-1.5 font-dm text-[10px] tracking-[0.1em] uppercase text-[#C9A96E]/50 border border-[#C9A96E]/10 px-3 py-1.5 rounded-full hover:border-[#C9A96E]/25 hover:text-[#C9A96E]/70 transition-colors duration-300"
+                                        >
+                                            <tag.Icon className="w-3 h-3" strokeWidth={1.5} />
+                                            {tag.label}
+                                        </span>
+                                    ))}
+                                </div>
+
+                                {/* Scroll hint on mobile */}
+                                <div className="animate-fade-up lg:hidden flex items-center gap-2 mt-2" style={{ animationDelay: "0.3s" }}>
+                                    <ArrowRight className="w-3 h-3 text-[#C9A96E]/30" />
+                                    <span className="font-dm text-[10px] tracking-[0.15em] uppercase text-[#C9A96E]/30">
+                                        Drop your image below
+                                    </span>
                                 </div>
                             </div>
 
-                            {/* Feature cards */}
-                            <div className="grid grid-cols-2 gap-2.5 max-w-md">
-                                <div className="bg-white/[0.025] border border-white/[0.06] p-3.5 rounded-[3px]">
-                                    <p className="font-mono text-[16px] mb-1.5">⚡</p>
-                                    <p className="font-mono text-[9px] uppercase tracking-[0.15em] text-white/45 leading-relaxed">
-                                        Lanczos3 Resampling
-                                    </p>
+                            {/* FOOTER BAR */}
+                            <div className="flex items-center justify-between py-4 mt-8 lg:mt-0 border-t border-[#E8DCC8]/[0.06]">
+                                <div className="flex items-center gap-4 sm:gap-8 overflow-x-auto no-scrollbar">
+                                    {["01 Upload", "02 Resize", "03 Download"].map((step, i) => (
+                                        <span
+                                            key={step}
+                                            className={`font-dm text-[9px] tracking-[0.2em] uppercase whitespace-nowrap ${i === 0 ? "text-[#C9A96E]/40" : "text-[#E8DCC8]/15"}`}
+                                        >
+                                            <span className="text-[#C9A96E]/60 mr-1">{step.split(' ')[0]}</span>
+                                            {step.split(' ')[1]}
+                                        </span>
+                                    ))}
                                 </div>
-                                <div className="bg-white/[0.025] border border-white/[0.06] p-3.5 rounded-[3px]">
-                                    <p className="font-mono text-[16px] mb-1.5">🔒</p>
-                                    <p className="font-mono text-[9px] uppercase tracking-[0.15em] text-white/45 leading-relaxed">
-                                        100% Client-side
-                                    </p>
-                                </div>
-                                <div className="bg-white/[0.025] border border-white/[0.06] p-3.5 rounded-[3px]">
-                                    <p className="font-mono text-[16px] mb-1.5">↕</p>
-                                    <p className="font-mono text-[9px] uppercase tracking-[0.15em] text-white/45 leading-relaxed">
-                                        Upscale & Compress
-                                    </p>
-                                </div>
-                                <div className="bg-white text-black p-3.5 rounded-[3px]">
-                                    <p className="font-mono text-[9px] uppercase tracking-[0.15em] font-bold leading-relaxed">
-                                        Free. No sign-up.
-                                    </p>
-                                </div>
+                                <span className="font-playfair text-[10px] italic text-[#C9A96E]/20 hidden sm:block">
+                                    images never leave your browser
+                                </span>
                             </div>
                         </div>
 
-                        {/* RIGHT — Drop zone */}
-                        <div className="lg:pt-4">
-                            <DropZone onFileSelect={setFile} />
+                        {/* RIGHT COLUMN — full-height DropZone */}
+                        <div className="lg:col-span-7 flex flex-col lg:border-l border-t lg:border-t-0 border-[#E8DCC8]/[0.06] p-5 sm:p-6 pb-24 lg:pb-6 lg:h-full bg-[#0A0A0A]/50 lg:bg-transparent min-h-[450px] lg:min-h-0 animate-fade-up" style={{ animationDelay: "0.15s" }}>
+                            <DropZone onFileSelect={setFile} fillHeight />
+
+                            {/* Column footer */}
+                            <div className="pt-4 flex items-center justify-between">
+                                <span className="font-dm text-[9px] tracking-[0.2em] uppercase text-[#E8DCC8]/15">
+                                    JPG · PNG · WebP
+                                </span>
+                                <span className="font-dm text-[9px] tracking-[0.2em] uppercase text-[#E8DCC8]/15">
+                                    ⌘V to paste
+                                </span>
+                            </div>
                         </div>
                     </div>
-                </section>
+                </>
             ) : (
-                <section className="px-8 sm:px-12 py-10 flex-1 flex flex-col justify-center border-b border-transparent">
+                <div className="relative z-10 flex-1 flex flex-col justify-center px-8 sm:px-14 py-8">
                     <div className="w-full max-w-7xl mx-auto space-y-3">
                         <Editor file={file} onReset={handleReset} onResult={setResult} />
                         {result && <ResultBar result={result} originalFile={file} />}
                     </div>
-                </section>
-            )}
-
-            {/* FOOTER */}
-            <footer className="px-8 sm:px-12 py-5 flex items-center justify-between border-t border-white/[0.06] mt-auto">
-                <div className="flex items-center gap-8">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/30">
-                        /01 Upload
-                    </span>
-                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/30">
-                        /02 Resize
-                    </span>
-                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/30">
-                        /03 Download
-                    </span>
                 </div>
-                <span className="font-mono text-[10px] text-white/25 tracking-wider">
-                    images never leave your browser
-                </span>
-            </footer>
+            )}
         </div>
     );
 }
