@@ -14,8 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Auto-generated WASM glue code:
     "public/wasm/**",
-    // Pre-built ONNX Runtime bundle (minified, not our code):
+    // Pre-built ONNX Runtime bundles (minified, not our code):
     "public/ort.webgpu.min.js",
+    "public/ort.all.min.js",
     "public/ai-worker.js",
   ]),
 ]);

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "setup:ort": "cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded*.wasm public/ && cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded*.mjs public/ && cp node_modules/onnxruntime-web/dist/ort.webgpu.min.js public/",
+    "setup:ort": "cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded*.wasm public/ && cp node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded*.mjs public/ && cp node_modules/onnxruntime-web/dist/ort.webgpu.min.js public/ && cp node_modules/onnxruntime-web/dist/ort.all.min.js public/",
     "postinstall": "bun run setup:ort"
   },
   "dependencies": {

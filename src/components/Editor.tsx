@@ -108,6 +108,15 @@ export function Editor({ file, onReset, onResult }: EditorProps) {
 
             const url = URL.createObjectURL(result.blob);
 
+            // If AI failed and we fell back to Lightning, warn the user
+            const fallbackReason = (result as ProcessResult & { aiFallback?: string }).aiFallback;
+            if (fallbackReason) {
+                toast.warning("AI Enhance unavailable in this browser. Used Lightning mode instead.", {
+                    description: "For AI quality, try Chrome or Edge.",
+                    duration: 6000,
+                });
+            }
+
             // Show the comparison modal instead of downloading immediately
             setProcessedResult({ url, result });
             setShowComparison(true);
@@ -434,7 +443,7 @@ function ComparisonModal({ originalUrl, enhancedUrl, originalSize, enhancedSize,
                         className="absolute inset-0 w-full h-full object-contain pointer-events-none"
                         draggable={false}
                         style={{
-                            clipPath: `inset(0 ${100 - position}% 0 0)`,
+                            clipPath: `inset(0 0 0 ${position}%)`,
                         }}
                     />
 

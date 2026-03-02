@@ -1,14 +1,20 @@
 /**
  * ImageForge AI Super-Resolution Worker
  * 
- * This worker runs OUTSIDE Turbopack's bundling system using importScripts()
- * to avoid blob URL path resolution issues with onnxruntime-web's WASM init.
+ * Uses ort.all.min.js (universal build) for cross-browser compatibility.
+ * Detects WebGPU availability BEFORE attempting it to avoid poisoning
+ * the WASM backend's initWasm() state.
+ * 
+ * Backend priority:
+ *   1. WebGPU (Chrome 113+, Edge 113+) — GPU-accelerated, fastest
+ *   2. WebGL  (most browsers) — GPU via WebGL, decent speed
+ *   3. WASM   (all browsers) — CPU fallback, slowest but universal
  */
 
-// Load ONNX Runtime Web (WebGPU build) directly from public/
-importScripts('/ort.webgpu.min.js');
+// Universal ONNX Runtime build — properly initializes ALL backends
+importScripts('/ort.all.min.js');
 
-// Configure WASM paths to point to the public directory (absolute URL)
+// Configure WASM paths to the public directory
 ort.env.wasm.wasmPaths = '/';
 ort.env.wasm.numThreads = 1;
 
@@ -20,22 +26,50 @@ let session = null;
  * exactly 64×64. Edge tiles that are smaller get zero-padded.
  */
 function imageDataToTensor(imageData, startX, startY, tileW, tileH, TILE_SIZE) {
-    const numPixels = TILE_SIZE * TILE_SIZE; // Always 64*64 = 4096
+    const numPixels = TILE_SIZE * TILE_SIZE;
     const float32Data = new Float32Array(numPixels * 3); // Pre-zeroed (zero-padding)
     const inData = imageData.data;
     const inWidth = imageData.width;
 
-    // Only copy the valid pixels; the rest stays zero (black padding)
     for (let y = 0; y < tileH; y++) {
         for (let x = 0; x < tileW; x++) {
             const inIdx = ((startY + y) * inWidth + (startX + x)) * 4;
-            const outIdx = y * TILE_SIZE + x; // Use TILE_SIZE stride, not tileW
+            const outIdx = y * TILE_SIZE + x;
             float32Data[outIdx] = inData[inIdx] / 255.0;
             float32Data[numPixels + outIdx] = inData[inIdx + 1] / 255.0;
             float32Data[numPixels * 2 + outIdx] = inData[inIdx + 2] / 255.0;
         }
     }
     return new ort.Tensor('float32', float32Data, [1, 3, TILE_SIZE, TILE_SIZE]);
+}
+
+/**
+ * Detect which execution providers are available in this browser.
+ * Order: WebGPU > WebGL > WASM (try best first, fall through)
+ */
+function getAvailableProviders() {
+    const providers = [];
+
+    // WebGPU: Chrome 113+, Edge 113+ (not Firefox, not Safari as of 2025)
+    if (typeof navigator !== 'undefined' && navigator.gpu) {
+        providers.push('webgpu');
+    }
+
+    // WebGL: nearly all browsers support this
+    try {
+        const canvas = new OffscreenCanvas(1, 1);
+        const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        if (gl) {
+            providers.push('webgl');
+        }
+    } catch {
+        // OffscreenCanvas not available, skip WebGL
+    }
+
+    // WASM: universal fallback — always available
+    providers.push('wasm');
+
+    return providers;
 }
 
 self.addEventListener('message', async (e) => {
@@ -45,39 +79,49 @@ self.addEventListener('message', async (e) => {
     try {
         const startTime = performance.now();
 
-        // --- SESSION INITIALIZATION ---
+        // --- SESSION INITIALIZATION (try each backend in order) ---
         if (!session) {
-            self.postMessage({ id, type: 'progress', progress: 5, message: 'Loading AI Model (63MB)...' });
+            self.postMessage({ id, type: 'progress', progress: 5, message: 'Loading AI Model...' });
 
-            let backend = 'unknown';
-            try {
-                session = await ort.InferenceSession.create('/models/realesrgan-x4.onnx', {
-                    executionProviders: ['webgpu']
-                });
-                backend = 'webgpu';
-            } catch (webgpuErr) {
-                console.warn('[ImageForge AI] WebGPU unavailable:', webgpuErr.message);
+            const providers = getAvailableProviders();
+            console.log('[ImageForge AI] Available providers:', providers);
+
+            let backend = null;
+            let lastError = null;
+
+            for (const provider of providers) {
                 try {
-                    session = await ort.InferenceSession.create('/models/realesrgan-x4.onnx', {
-                        executionProviders: ['wasm']
+                    self.postMessage({
+                        id, type: 'progress', progress: 8,
+                        message: `Trying ${provider.toUpperCase()} backend...`
                     });
-                    backend = 'wasm-cpu';
-                } catch (wasmErr) {
-                    console.error('[ImageForge AI] WASM also failed:', wasmErr.message);
-                    throw new Error(
-                        'AI Engine cannot start. Neither WebGPU nor WebAssembly ' +
-                        'backends are available in your browser. ' +
-                        'Try Chrome 113+ or Edge 113+ for WebGPU support.'
-                    );
+
+                    session = await ort.InferenceSession.create('/models/realesrgan-x4.onnx', {
+                        executionProviders: [provider]
+                    });
+                    backend = provider;
+                    break; // Success — stop trying
+                } catch (err) {
+                    console.warn(`[ImageForge AI] ${provider} failed:`, err.message);
+                    lastError = err;
+                    session = null; // Reset for next attempt
                 }
             }
+
+            if (!session) {
+                throw new Error(
+                    'AI Engine Initialization Failed. ' +
+                    'Your browser lacks WebGPU and WASM backend failed: ' +
+                    (lastError ? lastError.message : 'Unknown error')
+                );
+            }
+
             console.log('[ImageForge AI] Model loaded using backend:', backend);
             self.postMessage({ id, type: 'progress', progress: 15, message: `AI Model ready (${backend})` });
         }
 
         // --- TILED INFERENCE ---
         // CRITICAL: This model has FIXED input dimensions of [1, 3, 64, 64].
-        // Every tile MUST be exactly 64×64. Edge tiles are zero-padded, then cropped.
         const TILE_SIZE = 64;
         const SCALE = 4;
         const OUT_TILE = TILE_SIZE * SCALE; // 256
@@ -94,7 +138,6 @@ self.addEventListener('message', async (e) => {
             for (let tx = 0; tx < tilesX; tx++) {
                 const startX = tx * TILE_SIZE;
                 const startY = ty * TILE_SIZE;
-                // Actual valid pixels in this tile (may be < TILE_SIZE at edges)
                 const tileW = Math.min(TILE_SIZE, imageData.width - startX);
                 const tileH = Math.min(TILE_SIZE, imageData.height - startY);
 
@@ -106,7 +149,6 @@ self.addEventListener('message', async (e) => {
                     message: `AI Processing Tile ${tileCount}/${totalTiles}...`
                 });
 
-                // Create padded 64×64 tensor (edge tiles get zero-padded)
                 const inputTensor = imageDataToTensor(imageData, startX, startY, tileW, tileH, TILE_SIZE);
                 const feeds = {};
                 feeds[session.inputNames[0]] = inputTensor;
@@ -114,8 +156,8 @@ self.addEventListener('message', async (e) => {
                 const results = await session.run(feeds);
                 const outputTensor = results[session.outputNames[0]];
 
-                // Output is always [1, 3, 256, 256] (full 64×4 = 256)
-                // But we only copy the VALID pixels (tileW*4 × tileH*4), ignoring padding
+                // Output is always [1, 3, 256, 256].
+                // Only copy the VALID pixels (tileW*4 × tileH*4), ignoring padding.
                 const float32Out = outputTensor.data;
                 const validOutW = tileW * SCALE;
                 const validOutH = tileH * SCALE;
@@ -124,11 +166,10 @@ self.addEventListener('message', async (e) => {
 
                 for (let y = 0; y < validOutH; y++) {
                     for (let x = 0; x < validOutW; x++) {
-                        // Source index uses OUT_TILE stride (256), not validOutW
                         const srcIdx = y * OUT_TILE + x;
                         const dstIdx = ((outStartY + y) * outWidth + (outStartX + x)) * 4;
 
-                        finalData[dstIdx] = Math.max(0, Math.min(255, float32Out[srcIdx] * 255));
+                        finalData[dstIdx]     = Math.max(0, Math.min(255, float32Out[srcIdx] * 255));
                         finalData[dstIdx + 1] = Math.max(0, Math.min(255, float32Out[OUT_TILE * OUT_TILE + srcIdx] * 255));
                         finalData[dstIdx + 2] = Math.max(0, Math.min(255, float32Out[OUT_TILE * OUT_TILE * 2 + srcIdx] * 255));
                         finalData[dstIdx + 3] = 255;
