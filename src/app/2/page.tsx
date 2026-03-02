@@ -28,13 +28,13 @@ export default function Design2() {
         <div className="fixed inset-0 pointer-events-none -z-10 bg-[#F5F5F7]">
             {/* Extremely subtle radial gradient for depth */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_#FFFFFF_0%,_transparent_100%)] opacity-60" />
-            <div className="absolute inset-0 opacity-[0.015] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+            <div className="absolute inset-0 opacity-[0.015] bg-[url(&quot;data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E&quot;)]" />
         </div>
     );
 
     if (file) {
         return (
-            <div className="min-h-screen flex flex-col font-['Inter_Tight'] relative selection:bg-[#0071E3]/20">
+            <div className="min-h-screen flex flex-col font-[family-name:var(--font-intertight)] relative selection:bg-blue-500/20">
                 {backgroundMarkup}
                 <nav className="flex items-center justify-between px-8 sm:px-14 py-6 z-10">
                     <span className="text-[17px] font-semibold tracking-tight text-[#1D1D1F]">
@@ -60,7 +60,7 @@ export default function Design2() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 sm:p-8 lg:p-12 font-['Inter_Tight'] relative selection:bg-blue-500/20">
+        <div className="min-h-screen flex items-center justify-center p-4 sm:p-8 lg:p-12 font-[family-name:var(--font-intertight)] relative selection:bg-blue-500/20">
             {backgroundMarkup}
 
             {/* Main Apple Pro Container */}

@@ -211,33 +211,6 @@ body::after {
   font-family: 'DM Sans', system-ui, sans-serif;
 }
 
-/* Design 2 — Mercury fonts */
-.font-fahkwang {
-  font-family: 'Fahkwang', system-ui, sans-serif;
-}
-
-/* Design 3 — Paper fonts */
-.font-syne {
-  font-family: 'Syne', system-ui, sans-serif;
-}
-
-.font-worksans {
-  font-family: 'Work Sans', system-ui, sans-serif;
-}
-
-/* Design 4 — Aurora fonts */
-.font-outfit {
-  font-family: 'Outfit', system-ui, sans-serif;
-}
-
-.font-intertight {
-  font-family: 'Inter Tight', system-ui, sans-serif;
-}
-
-/* Design 5 — Brutalist font */
-.font-spacemono {
-  font-family: 'Space Mono', monospace;
-}
 
 /* ==================== ANIMATIONS ==================== */
 
@@ -262,7 +235,7 @@ body::after {
 }
 
 /* Staggered fade-in from below */
-@keyframes fadeUp {
+@keyframes fade-up {
   from {
     opacity: 0;
     transform: translateY(16px);
@@ -275,7 +248,7 @@ body::after {
 }
 
 .animate-fade-up {
-  animation: fadeUp 0.6s ease-out both;
+  animation: fade-up 0.6s ease-out both;
 }
 
 /* Shimmer border effect (Design 2) */

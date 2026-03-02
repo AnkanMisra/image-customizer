@@ -18,6 +18,7 @@ const eslintConfig = defineConfig([
     "public/ort.webgpu.min.js",
     "public/ort.all.min.js",
     "public/ai-worker.js",
+    "public/*.mjs",
   ]),
 ]);
 

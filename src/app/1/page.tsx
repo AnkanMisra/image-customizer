@@ -136,7 +136,7 @@ export default function Design1() {
                                     JPG · PNG · WebP
                                 </span>
                                 <span className="font-dm text-[9px] tracking-[0.2em] uppercase text-[#E8DCC8]/15">
-                                    ⌘V to paste
+                                    Paste from clipboard
                                 </span>
                             </div>
                         </div>

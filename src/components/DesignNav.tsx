@@ -25,12 +25,11 @@ export function DesignNav() {
                                 ? "bg-white text-black font-semibold"
                                 : "text-white/40 hover:text-white hover:bg-white/[0.04]"
                             }
-            `}
-                    >
-                        {link.label.replace("/", "")}
+            `}>
+                        {link.label}
                     </Link>
                 );
             })}
-        </div>
+        </div >
     );
 }

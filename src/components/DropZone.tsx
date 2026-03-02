@@ -11,7 +11,7 @@ interface DropZoneProps {
 
 export function DropZone({ onFileSelect, variant = "dark", fillHeight = false }: DropZoneProps) {
     const [isDragging, setIsDragging] = useState(false);
-    const [pasteMessage, setPasteMessage] = useState<string>("Click to browse · 📋 to paste");
+    const [isMounted, setIsMounted] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
     const handleFile = useCallback(
@@ -24,9 +24,8 @@ export function DropZone({ onFileSelect, variant = "dark", fillHeight = false }:
     );
 
     useEffect(() => {
-        // Safe OS detection after mount
-        const isMac = navigator.userAgent.toLowerCase().includes("mac");
-        setPasteMessage(`Click to browse · ${isMac ? "⌘V" : "Ctrl+V"} to paste`);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setIsMounted(true);
 
         const handler = (e: ClipboardEvent) => {
             const items = e.clipboardData?.items;
@@ -41,6 +40,9 @@ export function DropZone({ onFileSelect, variant = "dark", fillHeight = false }:
         document.addEventListener("paste", handler);
         return () => document.removeEventListener("paste", handler);
     }, [handleFile]);
+
+    const isMac = typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("mac");
+    const pasteMessage = isMounted ? `Click to browse · ${isMac ? "⌘V" : "Ctrl+V"} to paste` : "Click to browse or paste image";
 
     const onDragOver = (e: React.DragEvent) => {
         e.preventDefault();
@@ -65,6 +67,7 @@ export function DropZone({ onFileSelect, variant = "dark", fillHeight = false }:
             icon: "text-[#C9A96E]/40 group-hover:text-[#C9A96E]/70",
             textPri: "text-[#C9A96E]/70",
             textSec: "text-[#C9A96E]/40",
+            textHover: "hover:text-[#C9A96E]/90",
         },
         light: {
             base: "border-dashed border-[#1A1A1A]/10 bg-[#1A1A1A]/[0.02]",
@@ -73,6 +76,7 @@ export function DropZone({ onFileSelect, variant = "dark", fillHeight = false }:
             icon: "text-[#1A1A1A]/25 group-hover:text-[#1A1A1A]/45",
             textPri: "text-[#1A1A1A]/45",
             textSec: "text-[#1A1A1A]/25",
+            textHover: "hover:text-[#1A1A1A]",
         },
         glass: {
             base: "border-white/40 bg-white/10 backdrop-blur-xl shadow-[inset_0_0_20px_rgba(255,255,255,0.2)]",
@@ -81,6 +85,7 @@ export function DropZone({ onFileSelect, variant = "dark", fillHeight = false }:
             icon: "text-[#1D1D1F]/70 drop-shadow-sm",
             textPri: "text-[#1D1D1F]/90 font-semibold drop-shadow-sm",
             textSec: "text-[#1D1D1F]/50 font-medium",
+            textHover: "hover:text-[#1D1D1F]",
         },
         apple: {
             base: "border-black/30 bg-white shadow-[0_0_30px_rgba(0,0,0,0.08)]",
@@ -89,10 +94,11 @@ export function DropZone({ onFileSelect, variant = "dark", fillHeight = false }:
             icon: "text-[#1D1D1F]/80",
             textPri: "text-[#1D1D1F] font-semibold",
             textSec: "text-[#86868B] font-medium",
+            textHover: "hover:text-[#1D1D1F]",
         }
     };
 
-    const currentStyle = containerStyles[variant] || containerStyles.dark;
+    const currentStyle = containerStyles[variant];
 
     return (
         <div
@@ -128,7 +134,7 @@ export function DropZone({ onFileSelect, variant = "dark", fillHeight = false }:
                 DROP IMAGE HERE
             </p>
             <p className={`font-mono text-[9px] mt-3 tracking-[0.1em] relative z-10 ${currentStyle.textSec}`}>
-                <span className={`uppercase hover:text-[#1D1D1F] transition-colors`}>
+                <span className={`uppercase ${currentStyle.textHover} transition-colors`}>
                     {pasteMessage}
                 </span>
             </p>
