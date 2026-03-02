@@ -12,7 +12,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Download, X, Loader2, Zap, Monitor } from "lucide-react";
+import { Download, X, Loader2, Zap, Monitor, Sparkles, Brain } from "lucide-react";
 import {
     processImage,
     formatFileSize,
@@ -283,7 +283,7 @@ export function Editor({ file, onReset, onResult }: EditorProps) {
                     {isUpscale && (
                         <div className="space-y-2 animate-in fade-in zoom-in duration-300">
                             <Label className="font-mono text-[10px] uppercase tracking-[0.2em] text-emerald-400/90 font-bold flex items-center gap-2">
-                                ✨ Upscale Engine
+                                <Sparkles className="w-3.5 h-3.5" /> Upscale Engine
                             </Label>
                             <div className="flex bg-white/[0.03] p-1 rounded-[3px] border border-white/10">
                                 <button
@@ -291,14 +291,14 @@ export function Editor({ file, onReset, onResult }: EditorProps) {
                                     onClick={() => setUpscaleEngine("fast")}
                                     className={`flex-1 py-1.5 text-[10px] font-mono uppercase tracking-[0.1em] rounded-[2px] transition-colors ${upscaleEngine === 'fast' ? 'bg-white/10 text-white font-bold' : 'text-white/40 hover:text-white/70'}`}
                                 >
-                                    ⚡️ Lightning
+                                    <span className="flex items-center justify-center gap-1.5"><Zap className="w-3.5 h-3.5" /> Lightning</span>
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setUpscaleEngine("ai")}
                                     className={`flex-1 py-1.5 text-[10px] font-mono uppercase tracking-[0.1em] rounded-[2px] transition-colors ${upscaleEngine === 'ai' ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30' : 'text-white/40 hover:text-white/70'}`}
                                 >
-                                    ✨ AI Enhance
+                                    <span className="flex items-center justify-center gap-1.5"><Brain className="w-3.5 h-3.5" /> AI Enhance</span>
                                 </button>
                             </div>
                         </div>
@@ -348,17 +348,19 @@ export function Editor({ file, onReset, onResult }: EditorProps) {
             </div>
 
             {/* COMPARISON MODAL */}
-            {showComparison && processedResult && (
-                <ComparisonModal
-                    originalUrl={previewUrl}
-                    enhancedUrl={processedResult.url}
-                    originalSize={file.size}
-                    enhancedSize={processedResult.result.processedSize}
-                    onConfirm={handleConfirmDownload}
-                    onCancel={handleCancelDownload}
-                />
-            )}
-        </div>
+            {
+                showComparison && processedResult && (
+                    <ComparisonModal
+                        originalUrl={previewUrl}
+                        enhancedUrl={processedResult.url}
+                        originalSize={file.size}
+                        enhancedSize={processedResult.result.processedSize}
+                        onConfirm={handleConfirmDownload}
+                        onCancel={handleCancelDownload}
+                    />
+                )
+            }
+        </div >
     );
 }
 

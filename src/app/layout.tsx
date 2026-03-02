@@ -1,7 +1,16 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { DesignNav } from "@/components/DesignNav";
+import { Manrope, Space_Grotesk, JetBrains_Mono, DM_Sans, Playfair_Display, Inter_Tight } from 'next/font/google';
+
+const manrope = Manrope({ subsets: ['latin'], variable: '--font-body', weight: ['300', '400', '500', '600', '700'] });
+const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], variable: '--font-display', weight: ['400', '500', '600', '700'] });
+const jetBrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono', weight: ['400', '500'] });
+const dmSans = DM_Sans({ subsets: ['latin'], variable: '--font-dm', weight: ['400', '500', '600'] });
+const playfair = Playfair_Display({ subsets: ['latin'], variable: '--font-playfair', weight: ['400', '500', '600', '700'] });
+const interTight = Inter_Tight({ subsets: ['latin'], variable: '--font-intertight', weight: ['400', '500', '600', '700'] });
 
 export const metadata: Metadata = {
   title: "ImageForge",
@@ -23,20 +32,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Manrope:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="font-body antialiased">
+      <body className={`${manrope.variable} ${spaceGrotesk.variable} ${jetBrainsMono.variable} ${dmSans.variable} ${playfair.variable} ${interTight.variable} font-body antialiased`}>
         {children}
+        <Analytics />
         <DesignNav />
         <Toaster richColors position="bottom-center" />
       </body>

@@ -7,11 +7,8 @@ export function DesignNav() {
     const pathname = usePathname();
 
     const links = [
-        { href: "/1", label: "/1" },
-        { href: "/2", label: "/2" },
-        { href: "/3", label: "/3" },
-        { href: "/4", label: "/4" },
-        { href: "/5", label: "/5" },
+        { href: "/1", label: "1" },
+        { href: "/2", label: "2" },
     ];
 
     return (
@@ -28,12 +25,11 @@ export function DesignNav() {
                                 ? "bg-white text-black font-semibold"
                                 : "text-white/40 hover:text-white hover:bg-white/[0.04]"
                             }
-            `}
-                    >
-                        {link.label.replace("/", "")}
+            `}>
+                        {link.label}
                     </Link>
                 );
             })}
-        </div>
+        </div >
     );
 }
