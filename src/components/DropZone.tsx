@@ -133,8 +133,8 @@ export function DropZone({ onFileSelect, variant = "dark", fillHeight = false }:
             <p className={`font-mono text-[11px] tracking-[0.2em] relative z-10 ${currentStyle.textPri}`}>
                 DROP IMAGE HERE
             </p>
-            <p className={`font-mono text-[9px] mt-3 tracking-[0.1em] relative z-10 ${currentStyle.textSec}`}>
-                <span className={`uppercase ${currentStyle.textHover} transition-colors`}>
+            <p className={`font-mono text-[9px] mt-3 tracking-[0.1em] relative z-10 ${currentStyle.textSec} transition-colors group-hover:${currentStyle.textHover.replace('hover:', '')}`}>
+                <span className="uppercase">
                     {pasteMessage}
                 </span>
             </p>
