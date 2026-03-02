@@ -366,13 +366,21 @@ export async function processImage(
             URL.revokeObjectURL(url);
             return result;
         } catch (aiError) {
-            console.error("[ImageForge] AI Engine completely failed:", aiError);
+            console.warn("[ImageForge] AI Engine failed, falling back to Lightning mode:", aiError);
             if (aiWorker) {
                 aiWorker.terminate();
                 aiWorker = null;
             }
+            // Graceful fallback: use the Canvas/Lightning engine instead of blocking the user
+            onProgress?.(10, "AI unavailable — switching to Lightning mode...");
+            const fallbackResult = await canvasUpscale(img, targetBytes, outputFormat, onProgress);
+            fallbackResult.originalSize = file.size;
+            fallbackResult.engine = "canvas";
+            // Signal to the caller that we fell back (they can show a warning toast)
+            (fallbackResult as ProcessResult & { aiFallback?: string }).aiFallback =
+                aiError instanceof Error ? aiError.message : String(aiError);
             URL.revokeObjectURL(url);
-            throw new Error(`AI Engine failed: ${aiError instanceof Error ? aiError.message : String(aiError)}. Your device may not have enough VRAM or WebGPU support.`);
+            return fallbackResult;
         }
     }
 
