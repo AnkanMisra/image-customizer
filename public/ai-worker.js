@@ -89,6 +89,16 @@ self.addEventListener('message', async (e) => {
             let backend = null;
             let lastError = null;
 
+            const MODEL_URL = "https://huggingface.co/AXERA-TECH/Real-ESRGAN/resolve/main/onnx/realesrgan-x4.onnx?download=true";
+            let modelBuffer = null;
+            try {
+                const response = await fetch(MODEL_URL);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                modelBuffer = await response.arrayBuffer();
+            } catch (err) {
+                throw new Error(`Failed to download AI model from CDN: ${err.message}`);
+            }
+
             for (const provider of providers) {
                 try {
                     self.postMessage({
@@ -96,7 +106,7 @@ self.addEventListener('message', async (e) => {
                         message: `Trying ${provider.toUpperCase()} backend...`
                     });
 
-                    session = await ort.InferenceSession.create('/models/realesrgan-x4.onnx', {
+                    session = await ort.InferenceSession.create(modelBuffer, {
                         executionProviders: [provider]
                     });
                     backend = provider;
@@ -169,7 +179,7 @@ self.addEventListener('message', async (e) => {
                         const srcIdx = y * OUT_TILE + x;
                         const dstIdx = ((outStartY + y) * outWidth + (outStartX + x)) * 4;
 
-                        finalData[dstIdx]     = Math.max(0, Math.min(255, float32Out[srcIdx] * 255));
+                        finalData[dstIdx] = Math.max(0, Math.min(255, float32Out[srcIdx] * 255));
                         finalData[dstIdx + 1] = Math.max(0, Math.min(255, float32Out[OUT_TILE * OUT_TILE + srcIdx] * 255));
                         finalData[dstIdx + 2] = Math.max(0, Math.min(255, float32Out[OUT_TILE * OUT_TILE * 2 + srcIdx] * 255));
                         finalData[dstIdx + 3] = 255;

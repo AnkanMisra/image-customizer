@@ -38,17 +38,33 @@ self.addEventListener('message', async (e: MessageEvent<AIWorkerRequest>) => {
 
         if (!session) {
             self.postMessage({ id, type: 'progress', progress: 5, message: 'Loading AI Model into WebGPU (63MB)...' });
+
+            // Note: We use an external HuggingFace CDN link instead of a local /models/ path
+            // because Vercel automatically drops static files >50MB from deployments, causing a 404.
+            const MODEL_URL = "https://huggingface.co/AXERA-TECH/Real-ESRGAN/resolve/main/onnx/realesrgan-x4.onnx?download=true";
+
             try {
+                self.postMessage({ id, type: 'progress', progress: 5, message: 'Downloading AI Model from CDN (63MB)...' });
+                const response = await fetch(MODEL_URL);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const arrayBuffer = await response.arrayBuffer();
+
                 // Try WebGPU first for 10x speed boost
-                session = await InferenceSession.create('/models/realesrgan-x4.onnx', { executionProviders: ['webgpu'] });
-            } catch (webgpuErr) {
-                console.warn("[ImageForge] WebGPU not available, falling back to WebAssembly CPU:", webgpuErr);
+                self.postMessage({ id, type: 'progress', progress: 8, message: 'Initializing WebGPU backend...' });
                 try {
-                    // Critical: if webgpu fails, we must force the WASM execution provider explicitly
-                    session = await InferenceSession.create('/models/realesrgan-x4.onnx', { executionProviders: ['wasm'] });
-                } catch (wasmErr) {
-                    throw new Error(`AI Engine Initialization Failed. Your browser lacks WebGPU and WASM backend failed: ${String(wasmErr)}`);
+                    session = await InferenceSession.create(arrayBuffer, { executionProviders: ['webgpu'] });
+                } catch (webgpuErr) {
+                    console.warn("[ImageForge] WebGPU not available, falling back to WebAssembly CPU:", webgpuErr);
+                    self.postMessage({ id, type: 'progress', progress: 8, message: 'WebGPU failed, initializing WASM backend...' });
+                    try {
+                        // Critical: if webgpu fails, we must force the WASM execution provider explicitly
+                        session = await InferenceSession.create(arrayBuffer, { executionProviders: ['wasm'] });
+                    } catch (wasmErr) {
+                        throw new Error(`AI Engine Initialization Failed. Your browser lacks WebGPU and WASM backend failed: ${String(wasmErr)}`);
+                    }
                 }
+            } catch (fetchErr) {
+                throw new Error(`Failed to download AI model from CDN: ${String(fetchErr)}`);
             }
         }
 
