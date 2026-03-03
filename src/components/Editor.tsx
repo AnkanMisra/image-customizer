@@ -17,6 +17,7 @@ import {
     processImage,
     formatFileSize,
     getFormatExtension,
+    initAIEngine,
     type OutputFormat,
     type ProcessResult,
 } from "@/lib/imageProcessor";
@@ -48,6 +49,7 @@ export function Editor({ file, onReset, onResult }: EditorProps) {
 
     useEffect(() => {
         loadWasm().then((w) => setWasmReady(!!w));
+        initAIEngine().catch(() => { }); // pre-warm AI explicitly in the background
 
         const url = URL.createObjectURL(file);
         setPreviewUrl(url);
