@@ -91,11 +91,19 @@ self.addEventListener('message', async (e) => {
 
             const MODEL_URL = "https://huggingface.co/AXERA-TECH/Real-ESRGAN/resolve/main/onnx/realesrgan-x4.onnx?download=true";
             let modelBuffer = null;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
             try {
-                const response = await fetch(MODEL_URL);
+                const response = await fetch(MODEL_URL, { signal: controller.signal });
+                clearTimeout(timeoutId);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 modelBuffer = await response.arrayBuffer();
             } catch (err) {
+                clearTimeout(timeoutId);
+                if (err.name === 'AbortError') {
+                    throw new Error(`Failed to download AI model from CDN: Request timed out after 30s.`);
+                }
                 throw new Error(`Failed to download AI model from CDN: ${err.message}`);
             }
 

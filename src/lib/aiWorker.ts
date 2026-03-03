@@ -11,22 +11,22 @@ export type AIWorkerRequest = {
 
 let session: InferenceSession | null = null;
 
-function imageDataToTensor(image: ImageData, startX: number, startY: number, width: number, height: number): Tensor {
-    const numPixels = width * height;
-    const float32Data = new Float32Array(numPixels * 3);
+function imageDataToTensor(image: ImageData, startX: number, startY: number, width: number, height: number, TILE_SIZE: number): Tensor {
+    const numPixels = TILE_SIZE * TILE_SIZE;
+    const float32Data = new Float32Array(numPixels * 3); // Pre-zeroed (zero-padding)
     const inData = image.data;
     const inWidth = image.width;
 
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
             const inIdx = ((startY + y) * inWidth + (startX + x)) * 4;
-            const outIdx = y * width + x;
+            const outIdx = y * TILE_SIZE + x;
             float32Data[outIdx] = inData[inIdx] / 255.0; // R
             float32Data[numPixels + outIdx] = inData[inIdx + 1] / 255.0; // G
             float32Data[numPixels * 2 + outIdx] = inData[inIdx + 2] / 255.0; // B
         }
     }
-    return new Tensor('float32', float32Data, [1, 3, height, width]);
+    return new Tensor('float32', float32Data, [1, 3, TILE_SIZE, TILE_SIZE]);
 }
 
 self.addEventListener('message', async (e: MessageEvent<AIWorkerRequest>) => {
@@ -37,34 +37,47 @@ self.addEventListener('message', async (e: MessageEvent<AIWorkerRequest>) => {
         const startTime = performance.now();
 
         if (!session) {
-            self.postMessage({ id, type: 'progress', progress: 5, message: 'Loading AI Model into WebGPU (63MB)...' });
-
-            // Note: We use an external HuggingFace CDN link instead of a local /models/ path
-            // because Vercel automatically drops static files >50MB from deployments, causing a 404.
             const MODEL_URL = "https://huggingface.co/AXERA-TECH/Real-ESRGAN/resolve/main/onnx/realesrgan-x4.onnx?download=true";
 
             try {
                 self.postMessage({ id, type: 'progress', progress: 5, message: 'Downloading AI Model from CDN (63MB)...' });
-                const response = await fetch(MODEL_URL);
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                const arrayBuffer = await response.arrayBuffer();
 
-                // Try WebGPU first for 10x speed boost
-                self.postMessage({ id, type: 'progress', progress: 8, message: 'Initializing WebGPU backend...' });
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+                let arrayBuffer: ArrayBuffer;
                 try {
-                    session = await InferenceSession.create(arrayBuffer, { executionProviders: ['webgpu'] });
-                } catch (webgpuErr) {
-                    console.warn("[ImageForge] WebGPU not available, falling back to WebAssembly CPU:", webgpuErr);
-                    self.postMessage({ id, type: 'progress', progress: 8, message: 'WebGPU failed, initializing WASM backend...' });
+                    const response = await fetch(MODEL_URL, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    arrayBuffer = await response.arrayBuffer();
+                } catch (fetchErr: any) {
+                    clearTimeout(timeoutId);
+                    if (fetchErr.name === 'AbortError') {
+                        throw new Error(`Failed to download AI model from CDN: Request timed out after 30s.`);
+                    }
+                    throw new Error(`Failed to download AI model from CDN: ${String(fetchErr.message || fetchErr)}`);
+                }
+
+                if (typeof navigator !== 'undefined' && (navigator as any).gpu) {
+                    self.postMessage({ id, type: 'progress', progress: 8, message: 'Initializing WebGPU backend...' });
                     try {
-                        // Critical: if webgpu fails, we must force the WASM execution provider explicitly
-                        session = await InferenceSession.create(arrayBuffer, { executionProviders: ['wasm'] });
-                    } catch (wasmErr) {
-                        throw new Error(`AI Engine Initialization Failed. Your browser lacks WebGPU and WASM backend failed: ${String(wasmErr)}`);
+                        session = await InferenceSession.create(arrayBuffer, { executionProviders: ['webgpu'] });
+                    } catch (webgpuErr) {
+                        console.warn("[ImageForge] WebGPU not available, falling back to WebAssembly CPU:", webgpuErr);
                     }
                 }
-            } catch (fetchErr) {
-                throw new Error(`Failed to download AI model from CDN: ${String(fetchErr)}`);
+
+                if (!session) {
+                    self.postMessage({ id, type: 'progress', progress: 8, message: 'Initializing WASM backend...' });
+                    try {
+                        session = await InferenceSession.create(arrayBuffer, { executionProviders: ['wasm'] });
+                    } catch (wasmErr) {
+                        throw new Error(`AI Engine Initialization Failed. Both WebGPU and WASM backends failed: ${String(wasmErr)}`);
+                    }
+                }
+            } catch (err: any) {
+                throw err; // Bubble up exact error
             }
         }
 
@@ -73,7 +86,7 @@ self.addEventListener('message', async (e: MessageEvent<AIWorkerRequest>) => {
         const finalData = new Uint8ClampedArray(outWidth * outHeight * 4);
 
         // --- TILING TO PREVENT VRAM OOM ---
-        const TILE_SIZE = 128;
+        const TILE_SIZE = 64;
         const tilesX = Math.ceil(imageData.width / TILE_SIZE);
         const tilesY = Math.ceil(imageData.height / TILE_SIZE);
         const totalTiles = tilesX * tilesY;
@@ -88,7 +101,7 @@ self.addEventListener('message', async (e: MessageEvent<AIWorkerRequest>) => {
 
                 self.postMessage({ id, type: 'progress', progress: 10 + (tileCount / totalTiles) * 85, message: `AI Processing Tile ${tileCount + 1}/${totalTiles}...` });
 
-                const inputTensor = imageDataToTensor(imageData, startX, startY, tileW, tileH);
+                const inputTensor = imageDataToTensor(imageData, startX, startY, tileW, tileH, TILE_SIZE);
                 const feeds: Record<string, Tensor> = { [session.inputNames[0]]: inputTensor };
                 const results = await session.run(feeds);
                 const outputTensor = results[session.outputNames[0]];
