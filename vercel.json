@@ -2,5 +2,46 @@
     "$schema": "https://openapi.vercel.sh/vercel.json",
     "buildCommand": "next build",
     "framework": "nextjs",
-    "installCommand": "bun install"
+    "installCommand": "bun install",
+    "headers": [
+        {
+            "source": "/models/(.*\\.onnx)",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "public, max-age=31536000, immutable"
+                },
+                {
+                    "key": "Access-Control-Allow-Origin",
+                    "value": "*"
+                }
+            ]
+        },
+        {
+            "source": "/wasm/(.*\\.wasm)",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "public, max-age=31536000, immutable"
+                },
+                {
+                    "key": "Access-Control-Allow-Origin",
+                    "value": "*"
+                }
+            ]
+        },
+        {
+            "source": "/(.*\\.mjs)",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "public, max-age=31536000, immutable"
+                },
+                {
+                    "key": "Access-Control-Allow-Origin",
+                    "value": "*"
+                }
+            ]
+        }
+    ]
 }
