@@ -146,13 +146,14 @@ export function processViaAIWorker(
                 canvas.toBlob((blob) => {
                     if (blob) {
                         resolve({
+                            // Note: AI naturally outputs RGB, we bake it into JPG. 
                             blob,
                             width: data.width,
                             height: data.height,
                             originalSize: 0,
                             processedSize: blob.size,
                             action: "upscale",
-                            format: "image/jpeg", // AI naturally outputs RGB, we bake it into JPG
+                            format: "image/jpeg",
                             engine: "ai",
                             processingTimeMs: data.processingTimeMs
                         });
@@ -172,6 +173,31 @@ export function processViaAIWorker(
         // Transfer the image array buffer physically to the worker to save memory
         const buffer = imageData.data.buffer;
         worker.postMessage({ id, action: "upscale", imageData }, [buffer]);
+    });
+}
+
+/**
+ * Initializes the AI Worker in the background. 
+ * This lets the browser pre-download the 63MB ONNX model 
+ * so the user doesn't wait when they do click "Resize & Download".
+ */
+export function initAIEngine(): Promise<void> {
+    return new Promise((resolve) => {
+        const worker = getAIWorker();
+        const id = "init-" + Math.random().toString(36).substring(7);
+
+        const handleMessage = (event: MessageEvent) => {
+            const data = event.data;
+            if (data.id !== id) return;
+            if (data.type === "success" || data.type === "error") {
+                worker.removeEventListener("message", handleMessage);
+                resolve(); // resolve silently even on error so we don't crash app mount
+            }
+        };
+
+        worker.addEventListener("message", handleMessage);
+        // Pre-warm the model caching
+        worker.postMessage({ id, action: "init" });
     });
 }
 

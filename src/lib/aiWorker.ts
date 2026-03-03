@@ -5,7 +5,7 @@ env.wasm.numThreads = Math.max(1, navigator.hardwareConcurrency - 1 || 1);
 
 export type AIWorkerRequest = {
     id: string;
-    action: "upscale";
+    action: "init" | "upscale";
     imageData: ImageData;
 };
 
@@ -31,7 +31,7 @@ function imageDataToTensor(image: ImageData, startX: number, startY: number, wid
 
 self.addEventListener('message', async (e: MessageEvent<AIWorkerRequest>) => {
     const { id, action, imageData } = e.data;
-    if (action !== "upscale") return;
+    if (action !== "upscale" && action !== "init") return;
 
     try {
         const startTime = performance.now();
@@ -44,7 +44,7 @@ self.addEventListener('message', async (e: MessageEvent<AIWorkerRequest>) => {
                 let arrayBuffer: ArrayBuffer;
 
                 const cache = await caches.open(CACHE_NAME);
-                let cachedResponse = await cache.match(MODEL_URL);
+                const cachedResponse = await cache.match(MODEL_URL);
 
                 if (cachedResponse) {
                     self.postMessage({ id, type: 'progress', progress: 5, message: 'Loading AI Model from local cache (0ms)...' });
@@ -62,16 +62,17 @@ self.addEventListener('message', async (e: MessageEvent<AIWorkerRequest>) => {
 
                         await cache.put(MODEL_URL, response.clone());
                         arrayBuffer = await response.arrayBuffer();
-                    } catch (fetchErr: any) {
+                    } catch (fetchErr: unknown) {
                         clearTimeout(timeoutId);
-                        if (fetchErr.name === 'AbortError') {
+                        if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
                             throw new Error(`Failed to download AI model from CDN: Request timed out after 60s.`);
                         }
-                        throw new Error(`Failed to download AI model from CDN: ${String(fetchErr.message || fetchErr)}`);
+                        const errMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+                        throw new Error(`Failed to download AI model from CDN: ${errMsg}`);
                     }
                 }
 
-                if (typeof navigator !== 'undefined' && (navigator as any).gpu) {
+                if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
                     self.postMessage({ id, type: 'progress', progress: 8, message: 'Initializing WebGPU backend...' });
                     try {
                         session = await InferenceSession.create(arrayBuffer, { executionProviders: ['webgpu'] });
@@ -88,13 +89,18 @@ self.addEventListener('message', async (e: MessageEvent<AIWorkerRequest>) => {
                         throw new Error(`AI Engine Initialization Failed. Both WebGPU and WASM backends failed: ${String(wasmErr)}`);
                     }
                 }
-            } catch (err: any) {
+            } catch (err: unknown) {
                 throw err; // Bubble up exact error
             }
         }
 
-        const outWidth = imageData.width * 4;
-        const outHeight = imageData.height * 4;
+        if (action === "init") {
+            self.postMessage({ id, type: 'success', processingTimeMs: performance.now() - startTime });
+            return;
+        }
+
+        const outWidth = imageData!.width * 4;
+        const outHeight = imageData!.height * 4;
         const finalData = new Uint8ClampedArray(outWidth * outHeight * 4);
 
         // --- TILING TO PREVENT VRAM OOM ---
