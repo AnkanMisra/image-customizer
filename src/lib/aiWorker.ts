@@ -38,25 +38,37 @@ self.addEventListener('message', async (e: MessageEvent<AIWorkerRequest>) => {
 
         if (!session) {
             const MODEL_URL = "https://huggingface.co/AXERA-TECH/Real-ESRGAN/resolve/main/onnx/realesrgan-x4.onnx?download=true";
+            const CACHE_NAME = 'imageforge-ai-models-v1';
 
             try {
-                self.postMessage({ id, type: 'progress', progress: 5, message: 'Downloading AI Model from CDN (63MB)...' });
-
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 30000);
-
                 let arrayBuffer: ArrayBuffer;
-                try {
-                    const response = await fetch(MODEL_URL, { signal: controller.signal });
-                    clearTimeout(timeoutId);
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    arrayBuffer = await response.arrayBuffer();
-                } catch (fetchErr: any) {
-                    clearTimeout(timeoutId);
-                    if (fetchErr.name === 'AbortError') {
-                        throw new Error(`Failed to download AI model from CDN: Request timed out after 30s.`);
+
+                const cache = await caches.open(CACHE_NAME);
+                let cachedResponse = await cache.match(MODEL_URL);
+
+                if (cachedResponse) {
+                    self.postMessage({ id, type: 'progress', progress: 5, message: 'Loading AI Model from local cache (0ms)...' });
+                    arrayBuffer = await cachedResponse.arrayBuffer();
+                } else {
+                    self.postMessage({ id, type: 'progress', progress: 5, message: 'Downloading AI Model from CDN (63MB)...' });
+
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+
+                    try {
+                        const response = await fetch(MODEL_URL, { signal: controller.signal });
+                        clearTimeout(timeoutId);
+                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                        await cache.put(MODEL_URL, response.clone());
+                        arrayBuffer = await response.arrayBuffer();
+                    } catch (fetchErr: any) {
+                        clearTimeout(timeoutId);
+                        if (fetchErr.name === 'AbortError') {
+                            throw new Error(`Failed to download AI model from CDN: Request timed out after 60s.`);
+                        }
+                        throw new Error(`Failed to download AI model from CDN: ${String(fetchErr.message || fetchErr)}`);
                     }
-                    throw new Error(`Failed to download AI model from CDN: ${String(fetchErr.message || fetchErr)}`);
                 }
 
                 if (typeof navigator !== 'undefined' && (navigator as any).gpu) {

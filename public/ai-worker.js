@@ -90,21 +90,39 @@ self.addEventListener('message', async (e) => {
             let lastError = null;
 
             const MODEL_URL = "https://huggingface.co/AXERA-TECH/Real-ESRGAN/resolve/main/onnx/realesrgan-x4.onnx?download=true";
+            const CACHE_NAME = 'imageforge-ai-models-v1';
             let modelBuffer = null;
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
             try {
-                const response = await fetch(MODEL_URL, { signal: controller.signal });
-                clearTimeout(timeoutId);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                modelBuffer = await response.arrayBuffer();
-            } catch (err) {
-                clearTimeout(timeoutId);
-                if (err.name === 'AbortError') {
-                    throw new Error(`Failed to download AI model from CDN: Request timed out after 30s.`);
+                const cache = await caches.open(CACHE_NAME);
+                let cachedResponse = await cache.match(MODEL_URL);
+
+                if (cachedResponse) {
+                    self.postMessage({ id, type: 'progress', progress: 5, message: 'Loading AI Model from local cache (0ms)...' });
+                    modelBuffer = await cachedResponse.arrayBuffer();
+                } else {
+                    self.postMessage({ id, type: 'progress', progress: 5, message: 'Downloading AI Model from CDN (63MB)...' });
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout for initial large download
+
+                    try {
+                        const response = await fetch(MODEL_URL, { signal: controller.signal });
+                        clearTimeout(timeoutId);
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                        // Save a clone to the cache for next time
+                        await cache.put(MODEL_URL, response.clone());
+                        modelBuffer = await response.arrayBuffer();
+                    } catch (fetchErr) {
+                        clearTimeout(timeoutId);
+                        if (fetchErr.name === 'AbortError') {
+                            throw new Error(`Failed to download AI model from CDN: Request timed out after 60s.`);
+                        }
+                        throw fetchErr;
+                    }
                 }
-                throw new Error(`Failed to download AI model from CDN: ${err.message}`);
+            } catch (err) {
+                throw new Error(`Failed to initialize AI model: ${err.message}`);
             }
 
             for (const provider of providers) {
